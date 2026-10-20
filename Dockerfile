@@ -1,0 +1,36 @@
+# Build GraphHopper with the OHM plugin
+FROM maven:3.9-eclipse-temurin-21 AS build
+ARG GRAPHHOPPER_VERSION=11.1
+RUN git clone --quiet --depth 1 --branch ${GRAPHHOPPER_VERSION} https://github.com/graphhopper/graphhopper.git /gh
+WORKDIR /gh
+COPY src/org/openhistoricalmap/routing/ web-bundle/src/main/java/org/openhistoricalmap/routing/
+# Register the OHM encoded values. There is no config hook for this, so patch the
+# one place where the server creates GraphHopper, and fail if the patch did nothing.
+RUN F=web-bundle/src/main/java/com/graphhopper/http/GraphHopperManaged.java \
+ && sed -i 's|^        graphHopper.init(configuration);|        graphHopper.setImportRegistry(new org.openhistoricalmap.routing.OhmImportRegistry());\n        graphHopper.init(configuration);|' $F \
+ && grep -q OhmImportRegistry $F
+RUN mvn -q -B -DskipTests -pl web -am package \
+ && cp "$(ls web/target/graphhopper-web-*.jar | grep -v -e sources -e javadoc | head -1)" /graphhopper.jar
+# A graph only loads with the same profiles and encoded values it was built with,
+# so tag graphs with a hash of everything that changes them
+COPY config/ /build/config/
+RUN cat /build/config/* web-bundle/src/main/java/org/openhistoricalmap/routing/*.java \
+    | { cat; echo "${GRAPHHOPPER_VERSION}"; } | sha256sum | cut -c1-12 > /graph-version
+
+FROM eclipse-temurin:21-jre
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl python3 python3-venv libexpat1 \
+ && rm -rf /var/lib/apt/lists/* \
+ && python3 -m venv /opt/venv \
+ && /opt/venv/bin/pip install --no-cache-dir osmium==4.0.2
+ENV PATH=/opt/venv/bin:$PATH \
+    DATA_DIR=/data \
+    JAVA_OPTS="-Xmx4g"
+WORKDIR /app
+COPY --from=build /graphhopper.jar /app/graphhopper.jar
+COPY --from=build /graph-version /app/graph-version
+COPY config/ /app/config/
+COPY scripts/ /app/scripts/
+RUN chmod +x /app/scripts/*.sh
+EXPOSE 8989
+CMD ["/app/scripts/start.sh"]

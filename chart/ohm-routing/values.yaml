@@ -1,0 +1,46 @@
+image:
+  repository: ghcr.io/openhistoricalmap/ohm-routing
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# The volume holds the planet and the graphs. local-path pins it to one node,
+# and every pod that mounts it is scheduled there.
+persistence:
+  storageClass: local-path
+  size: 20Gi
+
+nodeSelector: {}
+tolerations: []
+
+server:
+  replicas: 1
+  javaOpts: "-Xms1g -Xmx3g"
+  resources:
+    requests: { cpu: 500m, memory: 3Gi }
+    limits: { memory: 5Gi }
+  # The first start downloads the planet and builds a graph, which can take a while
+  startupProbe:
+    periodSeconds: 30
+    failureThreshold: 60
+
+update:
+  enabled: true
+  # Diffs come from minute replication; the graph is rebuilt only if data changed
+  schedule: "0 */2 * * *"
+  javaOpts: "-Xmx6g"
+  fullRefreshDays: 7
+  replicationUrl: https://planet.openhistoricalmap.org/replication/minute
+  resources:
+    requests: { cpu: "2", memory: 4Gi }
+    limits: { memory: 8Gi }
+
+# Test page: pick A and B on the map and a date
+web:
+  enabled: true
+  image: nginx:1.27-alpine
+
+ingress:
+  enabled: false
+  className: traefik
+  host: routing.ohmstaging.org
+  annotations: {}

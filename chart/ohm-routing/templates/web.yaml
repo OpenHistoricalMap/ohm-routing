@@ -1,0 +1,61 @@
+{{- if .Values.web.enabled }}
+{{- $name := include "ohm-routing.fullname" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-web
+  labels:
+    {{- include "ohm-routing.labels" . | nindent 4 }}
+data:
+  index.html: |-
+    {{- .Files.Get "files/index.html" | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-web
+  labels:
+    {{- include "ohm-routing.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: web
+  template:
+    metadata:
+      labels:
+        {{- include "ohm-routing.labels" . | nindent 8 }}
+        app.kubernetes.io/component: web
+      annotations:
+        checksum/page: {{ .Files.Get "files/index.html" | sha256sum }}
+    spec:
+      containers:
+        - name: nginx
+          image: {{ .Values.web.image }}
+          ports:
+            - { name: http, containerPort: 80 }
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 64Mi }
+          volumeMounts:
+            - { name: page, mountPath: /usr/share/nginx/html }
+      volumes:
+        - name: page
+          configMap:
+            name: {{ $name }}-web
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-web
+  labels:
+    {{- include "ohm-routing.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: web
+  ports:
+    - { name: http, port: 80, targetPort: http }
+{{- end }}

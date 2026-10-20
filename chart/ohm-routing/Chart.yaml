@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ohm-routing
+description: Routing over OpenHistoricalMap data, filtered by date (GraphHopper)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
