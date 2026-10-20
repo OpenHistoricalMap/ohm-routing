@@ -1,5 +1,5 @@
 # Build GraphHopper with the OHM plugin
-FROM maven:3.9-eclipse-temurin-21 AS build
+FROM maven:3.9-eclipse-temurin-21-noble AS build
 ARG GRAPHHOPPER_VERSION=11.1
 RUN git clone --quiet --depth 1 --branch ${GRAPHHOPPER_VERSION} https://github.com/graphhopper/graphhopper.git /gh
 WORKDIR /gh
@@ -17,7 +17,8 @@ COPY config/ /build/config/
 RUN cat /build/config/* web-bundle/src/main/java/org/openhistoricalmap/routing/*.java \
     | { cat; echo "${GRAPHHOPPER_VERSION}"; } | sha256sum | cut -c1-12 > /graph-version
 
-FROM eclipse-temurin:21-jre
+# noble = Ubuntu 24.04 (Python 3.12), which has osmium wheels
+FROM eclipse-temurin:21-jre-noble
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl python3 python3-venv libexpat1 \
  && rm -rf /var/lib/apt/lists/* \
