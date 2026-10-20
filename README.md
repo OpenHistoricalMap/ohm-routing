@@ -1,39 +1,22 @@
 # ohm-routing
 
-Routing over OpenHistoricalMap data, filtered by date. Uses GraphHopper with a small plugin that stores `start_date`/`end_date` of each way, so a route only uses ways that existed on the selected date. Issues #506 and #695.
+GraphHopper plugin to route over OpenHistoricalMap data by date. It stores `start_date`/`end_date` of each way as `ohm_start`/`ohm_end` (decimal years, same conversion as the tiler), so a request can block the ways that did not exist on a given date. Issues #506 and #695.
 
 Test page: https://routing.ohmstaging.org
 
-## Layout
+- `src/` the plugin: `OhmDate` (date conversion), `OhmDateParser` (encoded values), `OhmImportRegistry` (registers them in GraphHopper).
+- `test/` checks `OhmDate` against the tiler conversion.
 
-- `src/` GraphHopper plugin. Stores `start_date`/`end_date` as `ohm_start`/`ohm_end` (decimal years, same conversion as the tiler).
-- `config/` GraphHopper config and the `car`, `foot`, `horse` and `carriage` profiles.
-- `scripts/`
-  - `start.sh` starts the server from the current graph. Builds one first if there is none for this image version.
-  - `update.sh` applies replication diffs to the planet, builds a new graph and restarts the server.
-- `Dockerfile` builds GraphHopper with the plugin plus the scripts. Published to `ghcr.io/openhistoricalmap/ohm-routing`.
-- `chart/ohm-routing` Helm chart: server, update CronJob (every 2 hours), test page and Ingress.
+The Docker image, profiles, update scripts and Kubernetes manifests live in [ohm-deploy](https://github.com/OpenHistoricalMap/ohm-deploy): `images/routing` and `ohm/templates/routing`. The image builds the plugin from this repo at a pinned commit.
 
-## How updates work
-
-The volume keeps the planet and the graphs:
-
-```
-/data/planet.osm.pbf
-/data/graphs/<version>-<timestamp>/
-/data/graphs/current -> <version>-<timestamp>
-```
-
-`update.sh` runs `pyosmium-up-to-date` on the planet. If there is new data, it builds a new graph next to the current one, switches `current` and does a rolling restart. The new pod loads the graph before the old one stops, so there is no downtime. A full planet is downloaded again every 7 days.
-
-`<version>` is a hash of `config/` and `src/`. A graph only loads with the same profiles and encoded values, so after a config change the server builds a new graph on start.
-
-## Deploy
+## Build and test
 
 ```bash
-helm upgrade --install routing chart/ohm-routing -n routing --create-namespace \
-  --set image.tag=<tag> \
-  --set ingress.enabled=true --set ingress.host=routing.ohmstaging.org
+v=11.1
+curl -fsSLO https://repo1.maven.org/maven2/com/graphhopper/graphhopper-core/$v/graphhopper-core-$v.jar
+curl -fsSLO https://repo1.maven.org/maven2/com/graphhopper/graphhopper-web-api/$v/graphhopper-web-api-$v.jar
+javac -d out -cp graphhopper-core-$v.jar:graphhopper-web-api-$v.jar src/org/openhistoricalmap/routing/*.java
+javac -d out -cp out test/OhmDateTest.java && java -cp out OhmDateTest
 ```
 
 ## Request

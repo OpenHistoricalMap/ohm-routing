@@ -1,0 +1,33 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GRAPHHOPPER_VERSION: "11.1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Download GraphHopper jars
+        run: |
+          base=https://repo1.maven.org/maven2/com/graphhopper
+          curl -fsSL -o core.jar "$base/graphhopper-core/$GRAPHHOPPER_VERSION/graphhopper-core-$GRAPHHOPPER_VERSION.jar"
+          curl -fsSL -o web-api.jar "$base/graphhopper-web-api/$GRAPHHOPPER_VERSION/graphhopper-web-api-$GRAPHHOPPER_VERSION.jar"
+
+      - name: Compile
+        run: javac -nowarn -d out -cp core.jar:web-api.jar src/org/openhistoricalmap/routing/*.java
+
+      - name: Test
+        run: |
+          javac -d out -cp out test/OhmDateTest.java
+          java -cp out OhmDateTest
